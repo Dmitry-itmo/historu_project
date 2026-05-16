@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Метро Санкт-Петербурга</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=PT+Sans:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --line1: #e63946;
+    --line2: #4895ef;
+    --line3: #2dc653;
+    --line4: #f4a261;
+    --line5: #9b5de5;
+    --line6: #8B4513;
+    --panel-w: 360px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'PT Sans', sans-serif;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+  #map-container {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+    background: #0a1628;
+    background-image:
+      radial-gradient(ellipse at 20% 50%, rgba(72,149,239,0.05) 0%, transparent 60%),
+      radial-gradient(ellipse at 80% 20%, rgba(155,93,229,0.05) 0%, transparent 60%);
+  }
+  
+  #project-credits {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    background: rgba(22, 27, 34, 0.92);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    backdrop-filter: blur(8px);
+    z-index: 5;
+    pointer-events: none; 
+  }
+  #project-credits h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  #project-credits .author {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+  #map-svg {
+    display: block;
+    min-width: 1000px;
+    min-height: 900px;
+    cursor: default;
+  }
+  .station-dot {
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .station-dot:hover circle { filter: brightness(1.6); }
+  .station-dot.active circle {
+    stroke: #fff !important;
+    stroke-width: 3 !important;
+    filter: drop-shadow(0 0 8px rgba(255,255,255,0.8));
+  }
+  .station-label {
+    font-family: 'PT Sans', sans-serif;
+    font-size: 11px;
+    fill: #c9d1d9;
+    pointer-events: none;
+    user-select: none;
+  }
+  /* SIDE PANEL */
+  #panel {
+    width: var(--panel-w);
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    transform: translateX(0);
+    transition: transform 0.35s cubic-bezier(.4,0,.2,1);
+    position: relative;
+    z-index: 10;
+    overflow: hidden;
+  }
+  #panel.hidden { transform: translateX(var(--panel-w)); }
+  #panel-header {
+    padding: 24px 24px 16px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, #1a1f2e 0%, #161b22 100%);
+    flex-shrink: 0;
+  }
+  #panel-line-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  #panel-line-dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  #panel-name {
+    font-family: 'Playfair Display', serif;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  #panel-open-year {
+    font-size: 12px;
+    color: var(--muted);
+  }
+  #panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 24px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  #panel-body::-webkit-scrollbar { width: 4px; }
+  #panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .section-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 18px 0 8px;
+  }
+  .section-title:first-child { margin-top: 0; }
+  #panel-description {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #adbac7;
+  }
+  #panel-facts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .fact-card {
+    background: #1c2128;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  .fact-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .fact-value { font-size: 14px; font-weight: 700; color: var(--text); }
+  #panel-history {
+    font-size: 13px;
+    line-height: 1.75;
+    color: #8b949e;
+  }
+  #panel-close {
+    position: absolute;
+    top: 16px; right: 16px;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: #1c2128;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    transition: all 0.2s;
+  }
+  #panel-close:hover { background: #30363d; color: var(--text); }
+  #welcome {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 32px;
+    text-align: center;
+    gap: 12px;
+  }
+  #welcome svg { opacity: 0.2; }
+  #welcome h2 {
+    font-family: 'Playfair Display', serif;
+    font-size: 20px;
+    color: var(--text);
+    opacity: 0.7;
+  }
+  #welcome p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  /* legend */
+  #legend {
+    position: absolute;
+    bottom: 16px; left: 16px;
+    background: rgba(22,27,34,0.92);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    backdrop-filter: blur(8px);
+  }
+  .leg-item { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .leg-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div id="map-container">
+  <div id="project-credits">
+    <h1>Интерактивная карта метро СПБ</h1>
+    <div class="author">Автор: Романов Дмитрий Евгеньевич</div>
+  </div>
+
+  <svg id="map-svg" viewBox="0 0 980 900" xmlns="http://www.w3.org/2000/svg">
+    <!-- GRID BG lines -->
+    <defs>
+      <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+        <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1a2133" stroke-width="0.5"/>
+      </pattern>
+    </defs>
+    <rect width="980" height="900" fill="url(#grid)"/>
+
+    <!-- ===== LINE 1 (RED) ===== -->
+    
+    <polyline points="600,50 600,377 275,600 238,625 238,700" fill="none" stroke="#e63946" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- ===== LINE 2 (BLUE) ===== -->
+    
+    <polyline points="390,50 390,700" fill="none" stroke="#4895ef" stroke-width="5" stroke-linecap="round"/>
+
+    <!-- ===== LINE 3 (GREEN) ===== -->
+
+    <polyline points="105,175  105,275 800,275 800,550" fill="none" stroke="#2dc653" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- ===== LINE 4 (ORANGE) ===== -->
+
+    <polyline points="150,377 890,377 890,535" fill="none" stroke="#f4a261" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- ===== LINE 5 (VIOLET) ===== -->
+
+    <polyline points="225,150 225,225 250,250 525,525 525,700" fill="none" stroke="#9b5de5" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- ===== LINE 6 (BROWN) ===== -->
+
+    <polyline points="115,650 150,625 215,625 238,625" fill="none" stroke="#8B4513" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+
+   
+
+    <!-- LINE 1 RED  -->
+    <g class="station-dot" data-id="devyatkino"><circle cx="600" cy="50" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="612" y="54">Девяткино</text></g>
+    <g class="station-dot" data-id="grazhdansky"><circle cx="600" cy="75" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="612" y="79">Гражданский проспект</text></g>
+    <g class="station-dot" data-id="akademicheskaya"><circle cx="600" cy="100" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="612" y="104">Академическая</text></g>
+    <g class="station-dot" data-id="politechnicheskaya"><circle cx="600" cy="125" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="612" y="129">Политехническая</text></g>
+    <g class="station-dot" data-id="ploshchadmuzhestva"><circle cx="600" cy="150" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="612" y="154">Площадь Мужества</text></g>
+    <g class="station-dot" data-id="lesnaya"><circle cx="600" cy="175" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="612" y="179">Лесная</text></g>
+    <g class="station-dot" data-id="vyborgskaya"><circle cx="600" cy="200" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="612" y="204">Выборгская</text></g>
+    <g class="station-dot" data-id="ploshchadlenina"><circle cx="600" cy="225" r="9" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="612" y="229">Площадь Ленина</text></g>
+    <g class="station-dot" data-id="chernyshevskaya"><circle cx="600" cy="250" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="612" y="254">Чернышевская</text></g>
+    <g class="station-dot" data-id="ploshchadvosstaniya"><circle cx="600" cy="275" r="9" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="612" y="270">Площадь Восстания</text></g>
+    <g class="station-dot" data-id="vladimirskaya"><circle cx="575" cy="395" r="9" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="585" y="405">Владимирская</text></g>
+    <g class="station-dot" data-id="pushkinskaya"><circle cx="445" cy="482" r="9" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="395" y="470">Пушкинская</text></g>
+    <g class="station-dot" data-id="tekhinst1"><circle cx="370" cy="535" r="9" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="230" y="525">Технологический институт-1</text></g>
+    <g class="station-dot" data-id="baltiyskaya"><circle cx="310" cy="575" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="318" y="579">Балтийская</text></g>
+    <g class="station-dot" data-id="narvskaya"><circle cx="275" cy="600" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="283" y="604">Нарвская</text></g>
+    <g class="station-dot" data-id="kirovskyzavod"><circle cx="238" cy="625" r="9" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="250" y="629">Кировский завод</text></g>
+    <g class="station-dot" data-id="avtovo"><circle cx="238" cy="650" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="246" y="654">Автово</text></g>
+    <g class="station-dot" data-id="leninskiy"><circle cx="238" cy="675" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="246" y="679">Ленинский пр.</text></g>
+    <g class="station-dot" data-id="prostvetverav"><circle cx="238" cy="700" r="7" fill="#e63946" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="246" y="704">Пр. Ветеранов</text></g>
+
+    <!-- LINE 2 BLUE  -->
+    <g class="station-dot" data-id="parnas"><circle cx="390" cy="50" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="54">Парнас</text></g>
+    <g class="station-dot" data-id="prosvetprosvescheniya"><circle cx="390" cy="75" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="79">Проспект Просвещения</text></g>
+    <g class="station-dot" data-id="ozerki"><circle cx="390" cy="100" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="104">Озерки</text></g>
+    <g class="station-dot" data-id="udelnaya"><circle cx="390" cy="125" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="129">Удельная</text></g>
+    <g class="station-dot" data-id="pionerskaya"><circle cx="390" cy="150" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="154">Пионерская</text></g>
+    <g class="station-dot" data-id="chernayarechka"><circle cx="390" cy="175" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="179">Чёрная речка</text></g>
+    <g class="station-dot" data-id="petrogradskaya"><circle cx="390" cy="200" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="204">Петроградская</text></g>
+    <g class="station-dot" data-id="gorkovskaya"><circle cx="390" cy="225" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="229">Горьковская</text></g>
+    <g class="station-dot" data-id="nevskiyprospekt"><circle cx="390" cy="250" r="9" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="254">Невский проспект</text></g>
+    <g class="station-dot" data-id="sennayaploshchad"><circle cx="390" cy="365" r="9" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="355">Сенная площадь</text></g>
+    <g class="station-dot" data-id="tekhinst2"><circle cx="390" cy="520" r="9" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="400" y="525"><tspan x="400" dy="0">Технологический</tspan>
+      <tspan x="400" dy="1.2em">институт-2</tspan></text></g>
+    <g class="station-dot" data-id="frunzenskaya"><circle cx="390" cy="550" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="554">Фрунзенская</text></g>
+    <g class="station-dot" data-id="moskovskiyevorota"><circle cx="390" cy="575" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="579">Московские ворота</text></g>
+    <g class="station-dot" data-id="elektrosila"><circle cx="390" cy="600" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="604">Электросила</text></g>
+    <g class="station-dot" data-id="parkpobedy"><circle cx="390" cy="625" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="629">Парк Победы</text></g>
+    <g class="station-dot" data-id="moskovskaya"><circle cx="390" cy="650" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="654">Московская</text></g>
+    <g class="station-dot" data-id="zvezdnaya"><circle cx="390" cy="675" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="679">Звёздная</text></g>
+    <g class="station-dot" data-id="kupchino"><circle cx="390" cy="700" r="7" fill="#4895ef" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="398" y="704">Купчино</text></g>
+    
+    
+    <!-- LINE 3 GREEN  -->
+    <g class="station-dot" data-id="begovaya"><circle cx="105" cy="175" r="7" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="113" y="179">Беговая</text></g>
+    <g class="station-dot" data-id="novokrestovskaya"><circle cx="105" cy="200" r="7" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="113" y="204">Зенит</text></g>
+    <g class="station-dot" data-id="primorskaya"><circle cx="105" cy="225" r="7" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="113" y="229">Приморская</text></g>
+    <g class="station-dot" data-id="vasileostrovskaya"><circle cx="150" cy="275" r="7" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="158" y="290">Василеостровская</text></g>
+    <g class="station-dot" data-id="gostinyydvor"><circle cx="390" cy="275" r="9" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="400" y="290">Гостиный двор</text></g>
+    <g class="station-dot" data-id="maaykovskaya"><circle cx="575" cy="275" r="9" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="505" y="290">Маяковская</text></g>
+    <g class="station-dot" data-id="plalexnevskogo1"><circle cx="800" cy="355" r="9" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="810" y="355">Пл. Александра Невского-1</text></g>
+    <g class="station-dot" data-id="elizarovskaya"><circle cx="800" cy="450" r="7" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="808" y="450">Елизаровская</text></g>
+    <g class="station-dot" data-id="lomonosovskaya"><circle cx="800" cy="475" r="7" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="808" y="475">Ломоносовская</text></g>
+    <g class="station-dot" data-id="proletarskaya"><circle cx="800" cy="500" r="7" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="808" y="500">Пролетарская</text></g>
+    <g class="station-dot" data-id="obukhovo"><circle cx="800" cy="525" r="7" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="808" y="525">Обухово</text></g>
+    <g class="station-dot" data-id="rybatskoe"><circle cx="800" cy="550" r="7" fill="#2dc653" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="808" y="550">Рыбацкое</text></g>
+    
+    <!-- LINE 4 ORANGE -->
+    <g class="station-dot" data-id="gornyinstitut"><circle cx="150" cy="377" r="7" fill="#f4a261" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="158" y="390">Горный институт</text></g>
+    
+    <g class="station-dot" data-id="spasskaya"><circle cx="410" cy="377" r="9" fill="#f4a261" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="418" y="390">Спасская</text></g>
+    <g class="station-dot" data-id="dostoyevskaya"><circle cx="600" cy="377" r="9" fill="#f4a261" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="608" y="390">Достоевская</text></g>
+    <g class="station-dot" data-id="ligovskiy"><circle cx="700" cy="377" r="7" fill="#f4a261" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="708" y="390">
+      <tspan x="708" dy="0">Лиговский</tspan>
+      <tspan x="708" dy="1.2em">проспект</tspan></text></g>
+    <g class="station-dot" data-id="plalexnevskogo2"><circle cx="800" cy="377" r="9" fill="#f4a261" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="808" y="390"><tspan x="808" dy="0">Пл. Александра</tspan>
+      <tspan x="808" dy="1.2em">Невского-2</tspan></text></g>
+    <g class="station-dot" data-id="novocherkasskaya"><circle cx="890" cy="450" r="7" fill="#f4a261" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="898" y="454">Новочеркасская</text></g>
+    <g class="station-dot" data-id="ladozhskaya"><circle cx="890" cy="475" r="7" fill="#f4a261" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="898" y="479">Ладожская</text></g>
+    <g class="station-dot" data-id="prospektbolshevikov"><circle cx="890" cy="500" r="7" fill="#f4a261" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="898" y="504"><tspan x="898" dy="0">Проспект</tspan>
+      <tspan x="898" dy="1.2em">Большевиков</tspan></text></g>
+    <g class="station-dot" data-id="ulitsadybenko"><circle cx="890" cy="535" r="7" fill="#f4a261" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="898" y="539">Улица Дыбенко</text></g>
+
+    <!-- LINE 5 VIOLET -->
+    <g class="station-dot" data-id="komendantskiy"><circle cx="225" cy="150" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="233" y="154">Комендантский проспект</text></g>
+    <g class="station-dot" data-id="starayaderevnya"><circle cx="225" cy="175" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="233" y="179">Старая Деревня</text></g>
+    <g class="station-dot" data-id="krestovskiy"><circle cx="225" cy="200" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="233" y="204">Крестовский остров</text></g>
+    <g class="station-dot" data-id="chkalovskaya"><circle cx="225" cy="225" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="233" y="229">Чкаловская</text></g>
+    <g class="station-dot" data-id="sportivnaya"><circle cx="250" cy="250" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="258" y="254">Спортивная</text></g>
+    <g class="station-dot" data-id="admiralteyskaya"><circle cx="325" cy="325" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="232" y="329">Адмиралтейская</text></g>
+    <g class="station-dot" data-id="sadovaya"><circle cx="390" cy="390" r="9" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="333" y="390">Садовая</text></g>
+    <g class="station-dot" data-id="zvenigorodskaya"><circle cx="467" cy="467" r="9" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="480" y="471">Звенигородская</text></g>
+    <g class="station-dot" data-id="obvodnyykanal"><circle cx="525" cy="525" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="533" y="529">Обводный канал</text></g>
+    <g class="station-dot" data-id="volkovskaya"><circle cx="525" cy="575" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="533" y="579">Волковская</text></g>
+    <g class="station-dot" data-id="bukharesskaya"><circle cx="525" cy="600" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="533" y="604">Бухарестская</text></g>
+    <g class="station-dot" data-id="mezhdunarodnaya"><circle cx="525" cy="625" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="533" y="629">Международная</text></g>
+    <g class="station-dot" data-id="prospektslavy"><circle cx="525" cy="650" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="533" y="654">Проспект Славы</text></g>
+    <g class="station-dot" data-id="dunayskaya"><circle cx="525" cy="675" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="533" y="679">Дунайская</text></g>
+    <g class="station-dot" data-id="shushary"><circle cx="525" cy="700" r="7" fill="#9b5de5" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="533" y="702">Шушары</text></g>
+    
+
+    <!-- LINE 6 BROWN -->
+    <g class="station-dot" data-id="yugo_zapadnaya"><circle cx="115" cy="650" r="7" fill="#8B4513" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="123" y="654">Юго-Западная</text></g>
+    <g class="station-dot" data-id="putvilovskaya"><circle cx="215" cy="625" r="9" fill="#8B4513" stroke="#0d1117" stroke-width="2"/><text class="station-label" x="155" y="613">Путиловская</text></g>
+  </svg>
+
+  <!-- Legend -->
+  <div id="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#e63946"></div> Линия 1</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#4895ef"></div> Линия 2</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#2dc653"></div> Линия 3</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#f4a261"></div> Линия 4</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#9b5de5"></div> Линия 5</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#8B4513"></div> Линия 6</div>
+  </div>
+</div>
+
+<!-- SIDE PANEL -->
+<div id="panel" class="hidden">
+  <button id="panel-close" onclick="closePanel()">✕</button>
+  <div id="panel-content">
+    <div id="welcome">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/>
+      </svg>
+      <h2>Метро Санкт-Петербурга</h2>
+      <p>Нажмите на любую станцию, чтобы узнать её историю и интересные факты</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const STATIONS = {
+  devyatkino: {
+    name: "Девяткино", line: 1, lineColor: "#e63946",
+    opened: "1978",
+    district: "Всеволожский район",
+    depth: "около 50 м",
+    exits: 2,
+    description: "Девяткино — самая северная и единственная наземная станция петербургского метро, расположенная за пределами городской черты, во Всеволожском районе Ленинградской области. Станция служит крупным транспортным узлом для жителей пригородов.",
+    history: "Открыта 29 декабря 1978 года как конечная станция первого участка Кировско-Выборгской линии на северном направлении. Является единственной станцией петербургской подземки за пределами города — она находится в посёлке Мурино. В часы пик через неё проходят тысячи пассажиров из Ленинградской области.",
+  },
+  grazhdansky: {
+    name: "Гражданский проспект", line: 1, lineColor: "#e63946",
+    opened: "1975",
+    district: "Калининский район",
+    depth: "54 м",
+    exits: 3,
+    description: "Станция обслуживает один из крупнейших спальных районов севера Петербурга. Рядом расположены крупные торговые центры и учебные заведения.",
+    history: "Открыта 31 декабря 1975 года. Оформление вестибюля выполнено в духе советского модернизма — лаконичные формы, мозаичные панно с городскими мотивами. Проходимость станции значительно выросла после массовой застройки района в 1980–90-е годы.",
+  },
+  akademicheskaya: {
+    name: "Академическая", line: 1, lineColor: "#e63946",
+    opened: "1975",
+    district: "Калининский район",
+    depth: "58 м",
+    exits: 2,
+    description: "Станция названа в честь расположенного рядом Академического района. Вблизи находятся научные институты и университеты Петербурга.",
+    history: "Открыта 31 декабря 1975 года вместе с «Гражданским проспектом». Декор зала выполнен в светлых тонах с геометрическими узорами. Является важнейшей точкой для студентов Политехнического университета и других вузов.",
+  },
+  politechnicheskaya: {
+    name: "Политехническая", line: 1, lineColor: "#e63946",
+    opened: "1975",
+    district: "Калининский район",
+    depth: "62 м",
+    exits: 2,
+    description: "Станция обслуживает Санкт-Петербургский политехнический университет Петра Великого — один из ведущих технических вузов страны.",
+    history: "Открыта 31 декабря 1975 года. Оформление станции отражает научно-технический дух эпохи: металлические рельефы и строгие геометрические формы. Рядом расположен кампус СПбПУ с парком и корпусами в стиле неоклассицизма.",
+  },
+  ploshchadmuzhestva: {
+    name: "Площадь Мужества", line: 1, lineColor: "#e63946",
+    opened: "1975",
+    district: "Калининский район",
+    depth: "72 м",
+    exits: 3,
+    description: "Станция известна в истории петербургского метро трагическим событием — прорывом тоннеля между «Площадью Мужества» и «Лесной» в 1995 году, из-за чего перегон закрывался на несколько лет.",
+    history: "Открыта 31 декабря 1975 года. В ноябре 1995 года между станциями произошёл крупнейший авиарий за историю метро: грунтовые воды размыли тоннель. Участок был закрыт до 2004 года, пока не был построен новый обходной тоннель. Это уникальный случай в истории российских метрополитенов.",
+  },
+  lesnaya: {
+    name: "Лесная", line: 1, lineColor: "#e63946",
+    opened: "1975",
+    district: "Выборгский район",
+    depth: "68 м",
+    exits: 2,
+    description: "Станция расположена у пересечения Лесного и Выборгского проспектов. Богатая история соседства с промышленными предприятиями.",
+    history: "Открыта 31 декабря 1975 года. Из-за аварии 1995 года вместе с «Площадью Мужества» была изолирована. В период закрытия пассажиров возил наземный «метробус» — бесплатный автобус на замену поездам. Северная часть перегона до сих пор заложена кирпичом.",
+  },
+  vyborgskaya: {
+    name: "Выборгская", line: 1, lineColor: "#e63946",
+    opened: "1975",
+    district: "Выборгский район",
+    depth: "64 м",
+    exits: 2,
+    description: "Станция у Финляндского вокзала. Служит крупным пересадочным узлом между метро и электричками, идущими в сторону Карельского перешейка.",
+    history: "Открыта 31 декабря 1975 года. Расположена в историческом Выборгском районе. Рядом находится Лесотехнический университет. Оформление станции выполнено в лаконичном советском стиле.",
+  },
+  ploshchadlenina: {
+    name: "Площадь Ленина", line: 1, lineColor: "#e63946",
+    opened: "1958",
+    district: "Калининский район",
+    depth: "59 м",
+    exits: 3,
+    description: "Станция расположена у Финляндского вокзала, откуда в апреле 1917 года Ленин приехал в Петроград. Перед вокзалом стоит знаменитый памятник вождю.",
+    history: "Открыта 1 июля 1958 года в составе первой очереди метро. Стены украшены горельефами с революционными сценами. В советское время это была одна из самых идеологически насыщенных станций города. До сих пор сохраняет историческое оформление.",
+  },
+  chernyshevskaya: {
+    name: "Чернышевская", line: 1, lineColor: "#e63946",
+    opened: "1958",
+    district: "Центральный район",
+    depth: "56 м",
+    exits: 2,
+    description: "Станция расположена в сердце исторического Петербурга, рядом с Таврическим садом и Смольным монастырём.",
+    history: "Открыта 1 июля 1958 года. Названа в честь писателя и революционера Николая Чернышевского. Поблизости находятся Таврический дворец, штаб-квартира петербургского парламента, и знаменитый Смольный собор.",
+  },
+  ploshchadvosstaniya: {
+    name: "Площадь Восстания", line: 1, lineColor: "#e63946",
+    opened: "1955",
+    district: "Центральный район",
+    depth: "58 м",
+    exits: 4,
+    description: "Одна из двух станций первой очереди метро, находящаяся у Московского вокзала — главного железнодорожного узла города. Важнейший транспортный хаб Петербурга.",
+    history: "Открыта 15 ноября 1955 года — в день открытия петербургского метро. Станция украшена монументальными мозаиками и мраморными колоннами в духе сталинского ампира. Имеет переход на «Маяковскую» (зелёная линия). До 1991 года называлась «Площадь Восстания».",
+  },
+  vladimirskaya: {
+    name: "Владимирская", line: 1, lineColor: "#e63946",
+    opened: "1955",
+    district: "Центральный район",
+    depth: "55 м",
+    exits: 2,
+    description: "Станция у Владимирской площади. Рядом находится Достоевская улица, дом-музей писателя и Кузнечный рынок.",
+    history: "Открыта 15 ноября 1955 года. Оформление выполнено в стиле сталинской неоклассики: пилоны из мрамора, лепные карнизы. Имеет переход на «Достоевскую». В районе расположены Достоевский квартал, Владимирский собор, известный рынок.",
+  },
+  pushkinskaya: {
+    name: "Пушкинская", line: 1, lineColor: "#e63946",
+    opened: "1956",
+    district: "Центральный район",
+    depth: "59 м",
+    exits: 2,
+    description: "Станция украшена белоснежной статуей Пушкина работы скульптора Михаила Аникушина, установленной в торце зала.",
+    history: "Открыта 30 апреля 1956 года. Является одной из самых красивых станций метро — оформление выполнено в белом мраморе с образами, связанными с жизнью Пушкина. Статуя поэта считается одним из лучших монументальных произведений советского подземного искусства.",
+  },
+  tekhinst1: {
+    name: "Технологический институт-1", line: 1, lineColor: "#e63946",
+    opened: "1955",
+    district: "Московский район",
+    depth: "57 м",
+    exits: 3,
+    description: "Пересадочная станция, связывающая красную (1) и синюю (2) линии. Одна из самых загруженных пересадок петербургского метро.",
+    history: "Открыта 15 ноября 1955 года. Является частью первого в мире кросс-платформенного пересадочного узла, где поезда двух линий останавливаются на параллельных платформах. Рядом находится Технологический институт — старейший технический вуз России (осн. 1828).",
+  },
+  baltiyskaya: {
+    name: "Балтийская", line: 1, lineColor: "#e63946",
+    opened: "1955",
+    district: "Кировский район",
+    depth: "55 м",
+    exits: 2,
+    description: "Станция у Балтийского вокзала, откуда отправляются электрички в сторону Петродворца и Гатчины.",
+    history: "Открыта 15 ноября 1955 года. Оформление выполнено в морской тематике: рельефы с кораблями, морские узоры. Является важным транспортным узлом юго-западного направления.",
+  },
+  narvskaya: {
+    name: "Нарвская", line: 1, lineColor: "#e63946",
+    opened: "1955",
+    district: "Кировский район",
+    depth: "61 м",
+    exits: 2,
+    description: "Станция у знаменитых Нарвских триумфальных ворот. Одна из станций первой очереди, оформленная в стиле сталинского ампира.",
+    history: "Открыта 15 ноября 1955 года. Декор зала посвящён теме труда: монументальные рельефы изображают рабочих и крестьян. Рядом расположены Нарвские ворота (1833), Дом культуры имени Горького и исторический рабочий квартал.",
+  },
+  kirovskyzavod: {
+    name: "Кировский завод", line: 1, lineColor: "#e63946",
+    opened: "1955",
+    district: "Кировский район",
+    depth: "63 м",
+    exits: 2,
+    description: "Станция у легендарного Кировского завода — одного из крупнейших машиностроительных предприятий России, основанного в 1801 году.",
+    history: "Открыта 15 ноября 1955 года. Оформление выполнено в тематике завода-гиганта: металлические узоры, образы тяжёлой промышленности. Кировский завод в годы блокады Ленинграда продолжал выпускать танки.",
+  },
+  parnas: {
+    name: "Парнас", line: 2, lineColor: "#4895ef",
+    opened: "2006",
+    district: "Приморский район",
+    depth: "наземная",
+    exits: 2,
+    description: "Конечная станция Московско-Петроградской линии. Расположена в одном из самых активно застраиваемых районов северного Петербурга.",
+    history: "Открыта 22 декабря 2006 года. Является наземной станцией с открытой платформой. Поблизости находятся крупные торговые центры и жилые кварталы. Название происходит от исторического поместья Парнас, располагавшегося на этих землях.",
+  },
+  prosvetprosvescheniya: {
+    name: "Проспект Просвещения", line: 2, lineColor: "#4895ef",
+    opened: "1988",
+    district: "Выборгский район",
+    depth: "около 55 м",
+    exits: 3,
+    description: "Крупный пересадочный узел северных районов Петербурга. Вблизи расположены учебные заведения, жилые массивы.",
+    history: "Открыта 31 декабря 1988 года. До открытия «Парнаса» в 2006 году была конечной станцией линии. Оформление выполнено в духе позднесоветского модернизма.",
+  },
+  ozerki: {
+    name: "Озерки", line: 2, lineColor: "#4895ef",
+    opened: "1988",
+    district: "Выборгский район",
+    depth: "52 м",
+    exits: 2,
+    description: "Станция у озера Суздальские озёра — популярного места отдыха петербуржцев. Вблизи расположен Шувалово-Озерковский культурный ландшафт.",
+    history: "Открыта 31 декабря 1988 года. Название отсылает к Суздальским озёрам (в народе — Озерки), вблизи которых в конце XIX — начале XX века располагалась популярная дачная местность. Здесь жил и Александр Блок.",
+  },
+  udelnaya: {
+    name: "Удельная", line: 2, lineColor: "#4895ef",
+    opened: "1982",
+    district: "Приморский район",
+    depth: "55 м",
+    exits: 2,
+    description: "Станция у исторического Удельного парка — одного из крупнейших парков города. Рядом расположен рынок и жилые кварталы.",
+    history: "Открыта 30 декабря 1982 года. Назвна по Удельному парку — бывшим владениям Удельного ведомства, управлявшего имуществом царской семьи. Оформление вестибюля включает декоративные элементы, отсылающие к теме городских парков.",
+  },
+  pionerskaya: {
+    name: "Пионерская", line: 2, lineColor: "#4895ef",
+    opened: "1982",
+    district: "Приморский район",
+    depth: "58 м",
+    exits: 2,
+    description: "Станция в Приморском районе, рядом с жилыми кварталами и Коломяжским путепроводом.",
+    history: "Открыта 30 декабря 1982 года. В советское время была названа в честь пионерского движения. Оформление станции выполнено в тематике советского детства. После 1991 года название сохранилось как исторический топоним.",
+  },
+  chernayarechka: {
+    name: "Чёрная речка", line: 2, lineColor: "#4895ef",
+    opened: "1982",
+    district: "Приморский район",
+    depth: "61 м",
+    exits: 2,
+    description: "Станция у реки Чёрной, на набережной которой в 1837 году состоялась дуэль Александра Пушкина, закончившаяся смертью поэта.",
+    history: "Открыта 30 декабря 1982 года. Трагическое историческое место — 27 января 1837 года здесь, на Чёрной речке, Пушкин был смертельно ранен на дуэли с Дантесом. На месте дуэли установлен мемориал.",
+  },
+  petrogradskaya: {
+    name: "Петроградская", line: 2, lineColor: "#4895ef",
+    opened: "1963",
+    district: "Петроградский район",
+    depth: "62 м",
+    exits: 3,
+    description: "Станция на Петроградской стороне — одном из самых исторически насыщенных районов города с богемными кафе и историческими зданиями.",
+    history: "Открыта 1 июля 1963 года. Находится в центре культурной жизни Петроградской стороны. Рядом — зоопарк, Петропавловская крепость, соборы и множество музеев. Оформление отражает морскую тему через якоря и корабельные детали.",
+  },
+  gorkovskaya: {
+    name: "Горьковская", line: 2, lineColor: "#4895ef",
+    opened: "1963",
+    district: "Петроградский район",
+    depth: "50 м",
+    exits: 2,
+    description: "Станция у Петропавловской крепости — главного символа Санкт-Петербурга. Вход в виде «летающей тарелки» стал одним из узнаваемых образов города.",
+    history: "Открыта 1 июля 1963 года. Наземный павильон в форме НЛО построен в 1960-е годы и стал своеобразной иконой советского модернизма. Рядом расположены Петропавловская крепость, зоопарк и набережная Невы.",
+  },
+  nevskiyprospekt: {
+    name: "Невский проспект", line: 2, lineColor: "#4895ef",
+    opened: "1963",
+    district: "Центральный район",
+    depth: "58 м",
+    exits: 4,
+    description: "Станция на главной улице Петербурга. Является одной из самых загруженных в метро, обслуживая туристов и жителей центра города.",
+    history: "Открыта 1 июля 1963 года. Имеет переход на «Гостиный двор» (зелёная линия). Расположена в самом сердце Невского проспекта, рядом с Казанским собором, многочисленными магазинами и ресторанами.",
+  },
+  sennayaploshchad: {
+    name: "Сенная площадь", line: 2, lineColor: "#4895ef",
+    opened: "1961",
+    district: "Центральный район",
+    depth: "52 м",
+    exits: 4,
+    description: "Узловая станция. Рядом — Сенная площадь, известная по роману Достоевского «Преступление и наказание».",
+    history: "Открыта 10 июня 1961 года. Станция входит в тройной пересадочный узел вместе со «Садовой» и «Спасской». В XIX веке Сенная площадь была центром петербургской торговли и жизни бедняков — именно её описывал Достоевский в своих романах.",
+  },
+  tekhinst2: {
+    name: "Технологический институт-2", line: 2, lineColor: "#4895ef",
+    opened: "1961",
+    district: "Московский район",
+    depth: "57 м",
+    exits: 3,
+    description: "Вторая платформа пересадочного узла «Технологический институт». Уникальный кросс-платформенный переход между красной и синей линиями.",
+    history: "Открыта 10 июня 1961 года. Вместе с «Технологическим институтом-1» образует первый в мире кросс-платформенный узел: поезда двух разных линий стоят на соседних путях одного зала, и пассажир просто пересекает платформу.",
+  },
+  frunzenskaya: {
+    name: "Фрунзенская", line: 2, lineColor: "#4895ef",
+    opened: "1961",
+    district: "Московский район",
+    depth: "55 м",
+    exits: 2,
+    description: "Станция в Московском районе, вблизи набережной Фонтанки и исторических кварталов.",
+    history: "Открыта 10 июня 1961 года. Названа в честь советского военачальника Михаила Фрунзе. Оформление выполнено в лаконичном стиле эпохи с металлическими рельефами.",
+  },
+  moskovskiyevorota: {
+    name: "Московские ворота", line: 2, lineColor: "#4895ef",
+    opened: "1961",
+    district: "Московский район",
+    depth: "57 м",
+    exits: 2,
+    description: "Станция у Московских триумфальных ворот (1838) — памятника победе России в Русско-турецкой войне.",
+    history: "Открыта 10 июня 1961 года. Московские триумфальные ворота были отлиты из чугуна и изначально стояли на въезде в Петербург со стороны Москвы. Станция украшена мотивами, отсылающими к воинской славе России.",
+  },
+  elektrosila: {
+    name: "Электросила", line: 2, lineColor: "#4895ef",
+    opened: "1961",
+    district: "Московский район",
+    depth: "59 м",
+    exits: 2,
+    description: "Станция у завода «Электросила» — крупнейшего производителя энергетического оборудования в СССР.",
+    history: "Открыта 10 июня 1961 года. Декор зала посвящён теме электроэнергетики: молнии, турбины, схемы электрических сетей. Завод «Электросила», основанный в 1898 году, производил оборудование для гидроэлектростанций по всей стране.",
+  },
+  parkpobedy: {
+    name: "Парк Победы", line: 2, lineColor: "#4895ef",
+    opened: "1961",
+    district: "Московский район",
+    depth: "58 м",
+    exits: 2,
+    description: "Станция у Парка Победы — мемориального парка, заложенного в честь победы в Великой Отечественной войне.",
+    history: "Открыта 10 июня 1961 года. Парк Победы был разбит в 1945–1946 годах на месте, где в годы блокады располагались кирпичные заводы, использовавшиеся, в том числе, для кремации жертв блокады. Станция украшена барельефами о победе.",
+  },
+  moskovskaya: {
+    name: "Московская", line: 2, lineColor: "#4895ef",
+    opened: "1969",
+    district: "Московский район",
+    depth: "57 м",
+    exits: 3,
+    description: "Станция у Московской площади — второй по размеру площади в Европе. Рядом находится аэропорт Пулково.",
+    history: "Открыта 25 декабря 1969 года. Московская площадь была спланирована в 1930-е годы как главная площадь нового центра Ленинграда. Поблизости — памятник Ленину, монументальный Дом Советов и гостиница «Пулковская».",
+  },
+  zvezdnaya: {
+    name: "Звёздная", line: 2, lineColor: "#4895ef",
+    opened: "1972",
+    district: "Московский район",
+    depth: "62 м",
+    exits: 2,
+    description: "Станция открылась в год 50-летия СССР. Оформление посвящено теме космоса — стены украшены астральными мотивами.",
+    history: "Открыта 25 декабря 1972 года. Название и декор связаны с космической эрой: звёзды, планеты, орбиты. Расположена в крупном спальном районе юга города.",
+  },
+  kupchino: {
+    name: "Купчино", line: 2, lineColor: "#4895ef",
+    opened: "1972",
+    district: "Фрунзенский район",
+    depth: "64 м",
+    exits: 3,
+    description: "Конечная станция Московско-Петроградской линии. Купчино — один из самых населённых районов Петербурга.",
+    history: "Открыта 25 декабря 1972 года. До Купчино от центра можно добраться без пересадок за 30–35 минут. Район Купчино, застроенный в 1960–70-е годы панельными домами, стал символом советской урбанизации. Отсюда идут электрички на Пушкин и Павловск.",
+  },
+  begovaya: {
+    name: "Беговая", line: 3, lineColor: "#2dc653",
+    opened: "2018",
+    district: "Приморский район",
+    depth: "около 60 м",
+    exits: 2,
+    description: "Одна из новейших станций петербургского метро, открытая к чемпионату мира по футболу 2018 года.",
+    history: "Открыта 3 апреля 2018 года. Вместе со «Стадионом» (ныне «Зенит») образует новый участок Невско-Василеостровской линии. Соединяет густонаселённый Приморский район с центром города.",
+  },
+  novokrestovskaya: {
+    name: "Зенит (Новокрестовская)", line: 3, lineColor: "#2dc653",
+    opened: "2018",
+    district: "Крестовский остров",
+    depth: "65 м",
+    exits: 2,
+    description: "Станция ведёт прямо к стадиону «Газпром Арена» — арене ФК «Зенит» и места матчей чемпионата мира 2018 года.",
+    history: "Открыта 3 апреля 2018 года под названием «Новокрестовская», затем переименована в «Зенит». Строилась специально к ЧМ-2018. Стадион «Газпром Арена», вмещающий 69 000 зрителей, — один из самых современных в Европе.",
+  },
+  krestovskiy: {
+    name: "Крестовский остров", line: 5, lineColor: "#9b5de5",
+    opened: "1999",
+    district: "Петроградский район",
+    depth: "62 м",
+    exits: 2,
+    description: "Станция на Крестовском острове — элитном районе Петербурга с парком Победы и многочисленными спортивными объектами.",
+    history: "Открыта 21 ноября 1999 года. Крестовский остров — место отдыха петербуржцев с XIX века: здесь находится парк развлечений ЦПКиО, яхт-клубы, теннисные корты и рестораны.",
+  },
+  chkalovskaya: {
+    name: "Чкаловская", line: 5, lineColor: "#9b5de5",
+    opened: "1997",
+    district: "Петроградский район",
+    depth: "60 м",
+    exits: 2,
+    description: "Станция в Петроградском районе, рядом с Чкаловским проспектом.",
+    history: "Открыта 28 апреля 1997 года. Названа в честь Валерия Чкалова — легендарного лётчика, совершившего первый беспосадочный перелёт через Северный полюс из СССР в США в 1937 году. Оформление содержит авиационные мотивы.",
+  },
+  sportivnaya: {
+    name: "Спортивная", line: 5, lineColor: "#9b5de5",
+    opened: "1997",
+    district: "Петроградский район",
+    depth: "65 м",
+    exits: 3,
+    description: "Станция у стадиона «Петровский» и спортивных объектов Петроградской стороны.",
+    history: "Открыта 28 апреля 1997 года. Одна из самых глубоких станций петербургского метро, расположенная под дном Малой Невки. Декор посвящён истории российского спорта.",
+  },
+  vasileostrovskaya: {
+    name: "Василеостровская", line: 3, lineColor: "#2dc653",
+    opened: "1967",
+    district: "Василеостровский район",
+    depth: "57 м",
+    exits: 3,
+    description: "Единственная станция метро на Васильевском острове — историческом и научном центре Петербурга, где расположены Академия наук и Горный университет.",
+    history: "Открыта 3 ноября 1967 года. Является единственной станцией на Васильевском острове. Вблизи находятся Санкт-Петербургский государственный университет, Академия художеств, Горный университет и биржа.",
+  },
+  gostinyydvor: {
+    name: "Гостиный двор", line: 3, lineColor: "#2dc653",
+    opened: "1967",
+    district: "Центральный район",
+    depth: "58 м",
+    exits: 4,
+    description: "Центральная станция города у знаменитого торгового пассажа «Гостиный двор» и Невского проспекта.",
+    history: "Открыта 3 ноября 1967 года. Имеет переход на «Невский проспект» (синяя линия). Рядом — Гостиный двор (1785), Публичная библиотека, Александринский театр и Аничков мост.",
+  },
+  maaykovskaya: {
+    name: "Маяковская", line: 3, lineColor: "#2dc653",
+    opened: "1967",
+    district: "Центральный район",
+    depth: "55 м",
+    exits: 2,
+    description: "Станция у Невского проспекта, переходная с красной линией (Площадь Восстания).",
+    history: "Открыта 3 ноября 1967 года. Названа в честь поэта Владимира Маяковского. Оформление выполнено в монументальном стиле с барельефами, посвящёнными советской поэзии и культуре.",
+  },
+  plalexnevskogo1: {
+    name: "Площадь Александра Невского-1", line: 3, lineColor: "#2dc653",
+    opened: "1985",
+    district: "Центральный район",
+    depth: "63 м",
+    exits: 3,
+    description: "Станция у Александро-Невской лавры — главного монастыря Петербурга и места захоронения Александра Невского.",
+    history: "Открыта 30 декабря 1985 года. Имеет переход на одноимённую станцию 4-й линии. Рядом — Александро-Невская лавра (1713), в некрополях которой похоронены Ломоносов, Суворов, Чайковский и другие великие россияне.",
+  },
+  elizarovskaya: {
+    name: "Елизаровская", line: 3, lineColor: "#2dc653",
+    opened: "1970",
+    district: "Невский район",
+    depth: "50 м",
+    exits: 2,
+    description: "Станция в Невском районе, названная в честь А. И. Елизарова — родственника Ленина.",
+    history: "Открыта 21 декабря 1970 года. Располагается в промышленном районе у Невы. Оформление выполнено в лаконичном стиле 1970-х годов с использованием геометрических форм.",
+  },
+  lomonosovskaya: {
+    name: "Ломоносовская", line: 3, lineColor: "#2dc653",
+    opened: "1970",
+    district: "Невский район",
+    depth: "52 м",
+    exits: 2,
+    description: "Станция в промышленном Невском районе, вблизи завода Ломоносова.",
+    history: "Открыта 21 декабря 1970 года. Названа в честь Михаила Ломоносова. В декоре — сцены из жизни учёного и изображения научных открытий. Поблизости — Невский завод (осн. 1857).",
+  },
+  proletarskaya: {
+    name: "Пролетарская", line: 3, lineColor: "#2dc653",
+    opened: "1981",
+    district: "Невский район",
+    depth: "58 м",
+    exits: 2,
+    description: "Станция в Невском районе с советским оформлением, посвящённым теме рабочего класса.",
+    history: "Открыта 30 декабря 1981 года. Оформление включает монументальные рельефы рабочих и образы промышленного труда. Рядом находятся крупные предприятия.",
+  },
+  obukhovo: {
+    name: "Обухово", line: 3, lineColor: "#2dc653",
+    opened: "1981",
+    district: "Невский район",
+    depth: "55 м",
+    exits: 2,
+    description: "Станция у Обуховского сталелитейного завода — одного из старейших заводов России.",
+    history: "Открыта 30 декабря 1981 года. Обуховский завод основан в 1863 году и поставлял пушки для императорского флота. В 1901 году здесь произошла знаменитая «Обуховская оборона» — столкновение рабочих с полицией.",
+  },
+  rybatskoe: {
+    name: "Рыбацкое", line: 3, lineColor: "#2dc653",
+    opened: "1981",
+    district: "Невский район",
+    depth: "57 м",
+    exits: 3,
+    description: "Южная конечная Невско-Василеостровской линии. Исторический посёлок рыбаков на берегу Невы.",
+    history: "Открыта 30 декабря 1981 года. Рыбацкое — одно из старейших сёл на берегу Невы, история которого уходит в XVII век. Сейчас это спальный район с частной застройкой и петербургским колоритом.",
+  },
+  gornyinstitut: {
+    name: "Горный институт", line: 4, lineColor: "#f4a261",
+    opened: "2023",
+    district: "Василеостровский район",
+    depth: "около 70 м",
+    exits: 1,
+    description: "Новейшая станция петербургского метро, открытая в 2023 году. Расположена на Васильевском острове у Горного университета.",
+    history: "Открыта в 2023 году. Стала западным продолжением Фрунзенско-Приморской линии на Васильевский остров. Горный университет — один из старейших технических вузов России, основан в 1773 году по указу Екатерины II.",
+  },
+  admiralteyskaya: {
+    name: "Адмиралтейская", line: 5, lineColor: "#9b5de5",
+    opened: "2011",
+    district: "Адмиралтейский район",
+    depth: "102 м",
+    exits: 1,
+    description: "Самая глубокая станция петербургского и одна из самых глубоких в мире. Расположена под Адмиралтейством.",
+    history: "Открыта 28 декабря 2011 года. Глубина 102 метра обусловлена геологическими особенностями: под центром Петербурга проходит мощный водоносный слой. Оформление посвящено теме морской истории России: барельефы кораблей, корабельные элементы декора.",
+  },
+  sadovaya: {
+    name: "Садовая", line: 5, lineColor: "#9b5de5",
+    opened: "2009",
+    district: "Центральный район",
+    depth: "53 м",
+    exits: 4,
+    description: "Часть тройного пересадочного узла в сердце Петербурга. Рядом — Сенной рынок, Садовая улица, Апраксин двор.",
+    history: "Открыта 7 марта 2009 года. Образует пересадочный узел со «Сенной площадью» и «Спасской». Этот тройной узел — один из самых загруженных в петербургском метро. Декор посвящён теме городских садов и парков.",
+  },
+  spasskaya: {
+    name: "Спасская", line: 4, lineColor: "#f4a261",
+    opened: "2009",
+    district: "Центральный район",
+    depth: "51 м",
+    exits: 4,
+    description: "Третья станция тройного пересадочного узла у Сенной площади. Оформление посвящено истории Санкт-Петербурга.",
+    history: "Открыта 7 марта 2009 года. Названа в честь Спасской улицы. Вместе с «Садовой» и «Сенной площадью» образует уникальный тройной узел, где три станции разных линий имеют прямые переходы.",
+  },
+  dostoyevskaya: {
+    name: "Достоевская", line: 4, lineColor: "#f4a261",
+    opened: "2010",
+    district: "Центральный район",
+    depth: "58 м",
+    exits: 2,
+    description: "Станция в квартале Достоевского, оформленная иллюстрациями сцен из его романов.",
+    history: "Открыта 22 декабря 2010 года. Уникальная художественная концепция: панели изображают сцены из «Преступления и наказания», «Идиота», «Братьев Карамазовых». В двух кварталах находится мемориальный музей-квартира Достоевского.",
+  },
+  ligovskiy: {
+    name: "Лиговский проспект", line: 4, lineColor: "#f4a261",
+    opened: "1985",
+    district: "Центральный район",
+    depth: "60 м",
+    exits: 3,
+    description: "Станция у Лиговского проспекта. Вблизи — Московский вокзал и Площадь Восстания.",
+    history: "Открыта 30 декабря 1985 года. Расположена на пересечении транспортных потоков центра города. Лиговский проспект — одна из длиннейших улиц Петербурга, когда-то вдоль неё тянулся Лиговский канал.",
+  },
+  plalexnevskogo2: {
+    name: "Площадь Александра Невского-2", line: 4, lineColor: "#f4a261",
+    opened: "1985",
+    district: "Центральный район",
+    depth: "62 м",
+    exits: 3,
+    description: "Вторая платформа пересадочного узла у Александро-Невской лавры.",
+    history: "Открыта 30 декабря 1985 года. Вместе с «Площадью Александра Невского-1» (зелёная линия) образует переходный узел. Александр Невский — небесный покровитель Санкт-Петербурга.",
+  },
+  novocherkasskaya: {
+    name: "Новочеркасская", line: 4, lineColor: "#f4a261",
+    opened: "1985",
+    district: "Красногвардейский район",
+    depth: "55 м",
+    exits: 2,
+    description: "Станция в Красногвардейском районе вблизи Невы и промышленных предприятий.",
+    history: "Открыта 30 декабря 1985 года. Оформление включает элементы, посвящённые казачьей культуре — Новочеркасск исторически связан с донским казачеством.",
+  },
+  ladozhskaya: {
+    name: "Ладожская", line: 4, lineColor: "#f4a261",
+    opened: "2004",
+    district: "Красногвардейский район",
+    depth: "57 м",
+    exits: 2,
+    description: "Станция у Ладожского вокзала — нового современного вокзального комплекса, открытого в 2003 году.",
+    history: "Открыта 20 декабря 2004 года. Ладожский вокзал стал крупнейшим проектом в истории современной России по созданию транспортной инфраструктуры. Отсюда отправляются поезда на восток, в том числе фирменный «Сапсан» в Москву.",
+  },
+  prospektbolshevikov: {
+    name: "Проспект Большевиков", line: 4, lineColor: "#f4a261",
+    opened: "1987",
+    district: "Невский район",
+    depth: "52 м",
+    exits: 2,
+    description: "Станция в крупном спальном районе востока Петербурга.",
+    history: "Открыта 30 декабря 1987 года. Является одним из крупнейших пересадочных узлов в восточной части города. После 1991 года переименование улицы обсуждалось, но название сохранилось.",
+  },
+  ulitsadybenko: {
+    name: "Улица Дыбенко", line: 4, lineColor: "#f4a261",
+    opened: "1987",
+    district: "Невский район",
+    depth: "50 м",
+    exits: 2,
+    description: "Конечная станция Фрунзенско-Приморской линии на востоке. Крупный торговый и транспортный узел.",
+    history: "Открыта 30 декабря 1987 года. Названа в честь революционного матроса и советского военачальника Павла Дыбенко. Вблизи расположены крупный торговый центр «Мега» и жилые кварталы.",
+  },
+  komendantskiy: {
+    name: "Комендантский проспект", line: 5, lineColor: "#9b5de5",
+    opened: "2005",
+    district: "Приморский район",
+    depth: "около 57 м",
+    exits: 3,
+    description: "Конечная станция Фрунзенско-Приморской линии. Крупный транспортный узел севера города.",
+    history: "Открыта 22 декабря 2005 года. Названа по Комендантскому аэродрому, функционировавшему здесь в 1910–1941 годах. Именно с этого аэродрома в 1910 году Михаил Ефимов совершил первый публичный полёт в России.",
+  },
+  starayaderevnya: {
+    name: "Старая Деревня", line: 5, lineColor: "#9b5de5",
+    opened: "1999",
+    district: "Приморский район",
+    depth: "55 м",
+    exits: 2,
+    description: "Станция у одноимённого исторического района, где расположены реставрационные мастерские Эрмитажа.",
+    history: "Открыта 21 ноября 1999 года. В этом районе находится открытый реставрационный центр Эрмитажа «Старая деревня», где хранятся и восстанавливаются тысячи экспонатов.",
+  },
+  primorskaya: {
+    name: "Приморская", line: 3, lineColor: "#2dc653",
+    opened: "1979",
+    district: "Василеостровский район",
+    depth: "52 м",
+    exits: 2,
+    description: "Станция на Васильевском острове у Финского залива. Рядом — пляж «Финское взморье» и парк 300-летия Петербурга.",
+    history: "Открыта 21 ноября 1979 года. Расположена у западного берега Васильевского острова, откуда открывается вид на залив. Декор посвящён морской теме: голубые тона, волны, корабли.",
+  },
+  zvenigorodskaya: {
+    name: "Звенигородская", line: 5, lineColor: "#9b5de5",
+    opened: "2008",
+    district: "Адмиралтейский район",
+    depth: "62 м",
+    exits: 2,
+    description: "Станция у Звенигородской улицы. Имеет переход на «Пушкинскую».",
+    history: "Открыта 7 марта 2008 года. Является частью глубокого расположения фиолетовой линии под историческим центром. Декор вдохновлён историей Санкт-Петербурга XVIII–XIX веков.",
+  },
+  obvodnyykanal: {
+    name: "Обводный канал", line: 5, lineColor: "#9b5de5",
+    opened: "2010",
+    district: "Адмиралтейский район",
+    depth: "58 м",
+    exits: 2,
+    description: "Станция у Обводного канала — исторической границы старого Петербурга. В декоре использованы образы промышленной архитектуры.",
+    history: "Открыта 22 декабря 2010 года. Обводный канал — самый большой канал города, построенный в 1769–1833 годах. В XIX веке вдоль него концентрировалась промышленность: заводы, склады, доходные дома.",
+  },
+  volkovskaya: {
+    name: "Волковская", line: 5, lineColor: "#9b5de5",
+    opened: "2008",
+    district: "Фрунзенский район",
+    depth: "55 м",
+    exits: 2,
+    description: "Станция у Волковского кладбища — старейшего действующего кладбища Петербурга.",
+    history: "Открыта 7 марта 2008 года. На Волковском православном кладбище похоронены Тургенев, Белинский, Добролюбов и многие другие деятели русской культуры. Рядом — знаменитые «Литераторские мостки».",
+  },
+  bukharesskaya: {
+    name: "Бухарестская", line: 5, lineColor: "#9b5de5",
+    opened: "2012",
+    district: "Фрунзенский район",
+    depth: "57 м",
+    exits: 2,
+    description: "Станция в спальном Фрунзенском районе. Оформление отсылает к архитектуре Румынии.",
+    history: "Открыта 26 декабря 2012 года. Улица Бухарестская названа в честь столицы Румынии. Декор станции включает мотивы романской и румынской архитектуры, отсылая к теме городов-побратимов.",
+  },
+  mezhdunarodnaya: {
+    name: "Международная", line: 5, lineColor: "#9b5de5",
+    opened: "2012",
+    district: "Фрунзенский район",
+    depth: "59 м",
+    exits: 2,
+    description: "Станция у Международного проспекта. Современный дизайн с витражами.",
+    history: "Открыта 26 декабря 2012 года. Оформление зала выполнено в виде многоцветных витражей, символизирующих международную дружбу. Была частью первого участка новой пятой линии.",
+  },
+  prospektslavy: {
+    name: "Проспект Славы", line: 5, lineColor: "#9b5de5",
+    opened: "2019",
+    district: "Фрунзенский район",
+    depth: "55 м",
+    exits: 2,
+    description: "Одна из новых станций пятой линии, открытая в 2019 году. Современная архитектура.",
+    history: "Открыта 3 апреля 2019 года. Вместе с «Дунайской» и «Шушарами» образует продление фиолетовой линии на юг города. Декор включает образы воинской доблести и городских побед.",
+  },
+  dunayskaya: {
+    name: "Дунайская", line: 5, lineColor: "#9b5de5",
+    opened: "2019",
+    district: "Пушкинский район",
+    depth: "52 м",
+    exits: 2,
+    description: "Станция у Дунайского проспекта. Современная архитектура 2010-х годов.",
+    history: "Открыта 3 апреля 2019 года. Является частью южного продления линии. Название отсылает к великой европейской реке — Дунаю, символу связи народов.",
+  },
+  shushary: {
+    name: "Шушары", line: 5, lineColor: "#9b5de5",
+    opened: "2019",
+    district: "Пушкинский район",
+    depth: "50 м",
+    exits: 2,
+    description: "Конечная южная станция пятой линии. Рядом расположены промышленные зоны и посёлок Шушары.",
+    history: "Открыта 3 апреля 2019 года. Шушары — исторический населённый пункт, известный с XVIII века. В XIX веке здесь велись опыты по строительству первой российской железной дороги. Ныне район активно застраивается жильём.",
+  },
+  yugo_zapadnaya: {
+    name: "Юго-Западная", line: 6, lineColor: "#8B4513",
+    opened: "проект",
+    district: "Красносельский район",
+    depth: "—",
+    exits: 2,
+    description: "Планируемая станция Красносельско-Калининской линии (шестой линии) метро.",
+    history: "Проектируется как конечная западная станция новой шестой линии. Строительство связано с необходимостью метрополитена для огромных районов Красносельского и Кировского районов.",
+  },
+  avtovo: {
+    name: "Автово", line: 1, lineColor: "#e63946",
+    opened: "1955",
+    district: "Кировский район",
+    depth: "14 м",
+    exits: 2,
+    description: "Автово — одна из самых красивых станций метро в мире по версии различных изданий. Колонны украшены стеклянными рельефами, восемь из них отделаны не мрамором, а хрустальным стеклом.",
+    history: "Открыта 15 ноября 1955 года. Уникальная достопримечательность: 46 колонн, из которых 8 декорированы хрустальным стеклом вместо мрамора — из экономии, но в итоге вышло великолепно. The Daily Telegraph включил Автово в топ-12 самых красивых станций метро мира.",
+  },
+  leninskiy: {
+    name: "Ленинский проспект", line: 1, lineColor: "#e63946",
+    opened: "1977",
+    district: "Кировский район",
+    depth: "около 45 м",
+    exits: 2,
+    description: "Станция у Ленинского проспекта в Кировском районе. Важный транспортный узел запада города.",
+    history: "Открыта 28 ноября 1977 года. Расположена в жилом массиве западной части города. Поблизости — Кировский завод, дворец культуры, историческая застройка.",
+  },
+  prostvetverav: {
+    name: "Проспект Ветеранов", line: 1, lineColor: "#e63946",
+    opened: "1977",
+    district: "Кировский район",
+    depth: "42 м",
+    exits: 3,
+    description: "Южная конечная первой линии, обслуживающая густонаселённый Кировский район.",
+    history: "Открыта 28 ноября 1977 года. Является конечной станцией Кировско-Выборгской линии. Район Проспекта Ветеранов — один из крупнейших спальных массивов юго-запада, с населением около 250 000 человек.",
+  },
+  putvilovskaya: {
+    name: "Путиловская", line: 6, lineColor: "#8B4513",
+    opened: "строится",
+    district: "Кировский район",
+    depth: "—",
+    exits: 2,
+    description: "Строящаяся станция Красносельско-Калининской (шестой) линии у знаменитого Кировского (Путиловского) завода.",
+    history: "В стадии строительства. Путиловский завод (ныне — Кировский) основан в 1801 году, производил паровозы, артиллерийские орудия, трактора, танки. В 1905 году забастовка рабочих здесь стала одним из поводов для «Кровавого воскресенья».",
+  },
+};
+
+const LINE_NAMES = {1:"Кировско-Выборгская",2:"Московско-Петроградская",3:"Невско-Василеостровская",4:"Фрунзенско-Приморская",5:"Фрунзенско-Приморская (фиолетовая)",6:"Красносельско-Калининская"};
+
+let activeStation = null;
+
+document.querySelectorAll('.station-dot').forEach(el => {
+  el.addEventListener('click', () => {
+    const id = el.dataset.id;
+    const data = STATIONS[id];
+    if (!data) return;
+    if (activeStation) activeStation.classList.remove('active');
+    el.classList.add('active');
+    activeStation = el;
+    showPanel(data);
+  });
+});
+
+function showPanel(data) {
+  const panel = document.getElementById('panel');
+  const content = document.getElementById('panel-content');
+  content.innerHTML = `
+    <div id="panel-header">
+      <div id="panel-line-badge">
+        <div id="panel-line-dot" style="background:${data.lineColor}"></div>
+        Линия ${data.line} — ${LINE_NAMES[data.line]}
+      </div>
+      <div id="panel-name">${data.name}</div>
+      <div id="panel-open-year">Открыта: ${data.opened} · ${data.district}</div>
+    </div>
+    <div id="panel-body">
+      <div class="section-title">О станции</div>
+      <div id="panel-description">${data.description}</div>
+      <div class="section-title">Факты</div>
+      <div id="panel-facts">
+        <div class="fact-card"><div class="fact-label">Год открытия</div><div class="fact-value">${data.opened}</div></div>
+        <div class="fact-card"><div class="fact-label">Глубина</div><div class="fact-value">${data.depth}</div></div>
+        <div class="fact-card"><div class="fact-label">Район</div><div class="fact-value">${data.district}</div></div>
+        <div class="fact-card"><div class="fact-label">Линия №</div><div class="fact-value" style="color:${data.lineColor}">${data.line}</div></div>
+      </div>
+      <div class="section-title">История</div>
+      <div id="panel-history">${data.history}</div>
+    </div>
+  `;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.id = 'panel-close';
+  closeBtn.innerHTML = '✕';
+  closeBtn.onclick = closePanel;
+  content.appendChild(closeBtn);
+  panel.classList.remove('hidden');
+}
+
+function closePanel() {
+  document.getElementById('panel').classList.add('hidden');
+  if (activeStation) { activeStation.classList.remove('active'); activeStation = null; }
+}
+</script>
+</body>
+</html>
